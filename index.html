@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nutrition</title>
+    <!-- Bootstrap CSS -->
+    <link
+      href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <!-- Fancybox CSS -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@fancyapps/ui@4.0/dist/fancybox.css"
+    />
+    <style>
+      .v-img {
+        display: inline-block;
+        max-width: 100px;
+        max-height: 100px;
+        cursor: pointer;
+      }
+      .dflex {
+        display: flex;
+      }
+      .photo-container {
+        padding: 10px;
+        border-top: 1px solid #ccc;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        background-color: #f9f9f9;
+      }
+      .pagination {
+        justify-content: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container mt-5">
+      <div class="form-group">
+        <input
+          type="text"
+          id="search"
+          class="form-control"
+          placeholder="Поиск пользователя"
+        />
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-striped table-bordered">
+          <thead class="thead-dark">
+            <tr>
+              <th>#</th>
+              <th>Id Пользователя</th>
+              <th>Номер заказа</th>
+              <th>Комментарий</th>
+              <th>Время</th>
+            </tr>
+          </thead>
+          <tbody id="data-table-body"></tbody>
+        </table>
+      </div>
+
+      <nav aria-label="Page navigation example">
+        <ul class="pagination" id="pagination"></ul>
+      </nav>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.2/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <!-- Fancybox JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@fancyapps/ui@4.0/dist/fancybox.umd.js"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        const searchInput = document.getElementById("search");
+        const dataTableBody = document.getElementById("data-table-body");
+        const pagination = document.getElementById("pagination");
+        let currentPage = 1;
+        const limit = 5;
+
+        searchInput.addEventListener("input", async () => {
+          const userId = searchInput.value.trim();
+          if (userId) {
+            try {
+              const response = await fetch(
+                `http://localhost:3001/api/users/${userId}`
+              );
+              const result = await response.json();
+              const user = result.data;
+              if (user) {
+                user.photos = user.photos ? await getPhotos(user.photos) : [];
+                renderTable([user]);
+              } else {
+                dataTableBody.innerHTML =
+                  '<tr><td colspan="5" class="text-center">No user found</td></tr>';
+              }
+            } catch (error) {
+              console.error("Error fetching user:", error);
+              dataTableBody.innerHTML =
+                '<tr><td colspan="5" class="text-center">Error fetching user data</td></tr>';
+            }
+          } else {
+            fetchData();
+          }
+        });
+
+        async function fetchData() {
+          try {
+            const response = await fetch(
+              `http://localhost:3001/api/users?page=${currentPage}&limit=${limit}`
+            );
+            const result = await response.json();
+            const data = await Promise.all(
+              result.data.map(async (item) => {
+                if (item.photos) {
+                  item.photos = await getPhotos(item.photos);
+                }
+                return item;
+              })
+            );
+            renderTable(data);
+            updatePagination(result.meta);
+          } catch (error) {
+            console.error("Failed to fetch data:", error);
+          }
+        }
+
+        async function getPhotos(photoIds) {
+          const apiKey = "7271165870:AAFv3S5h_GcdjTRWQd4uv--nyOLLORoh5Oc";
+          try {
+            return await Promise.all(
+              photoIds.split(",").map(async (fileId) => {
+                const response = await fetch(
+                  `https://api.telegram.org/bot${apiKey}/getFile?file_id=${fileId}`
+                );
+                const result = await response.json();
+                const filePath = result.result.file_path;
+                return `https://api.telegram.org/file/bot${apiKey}/${filePath}`;
+              })
+            );
+          } catch (error) {
+            console.error("Error fetching photo URLs:", error);
+            return [];
+          }
+        }
+
+        function formatDate(dateString) {
+          const date = new Date(dateString);
+          const options = {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          };
+          return date.toLocaleString("ru-RU", options);
+        }
+
+        function renderTable(data) {
+          dataTableBody.innerHTML = "";
+          data.forEach((item) => {
+            const row = document.createElement("tr");
+
+            const idCell = document.createElement("td");
+            idCell.textContent = item.id;
+            row.appendChild(idCell);
+
+            const userIdCell = document.createElement("td");
+            userIdCell.textContent = item.userId;
+            row.appendChild(userIdCell);
+
+            const orderNumberCell = document.createElement("td");
+            orderNumberCell.textContent = item.orderNumber;
+            row.appendChild(orderNumberCell);
+
+            const commentsCell = document.createElement("td");
+            commentsCell.textContent = item.comments;
+            row.appendChild(commentsCell);
+
+            const timestampCell = document.createElement("td");
+            timestampCell.textContent = formatDate(item.timestamp);
+            row.appendChild(timestampCell);
+
+            dataTableBody.appendChild(row);
+
+            const photoRow = document.createElement("tr");
+            const photoCell = document.createElement("td");
+            photoCell.setAttribute("colspan", "5");
+
+            if (item.photos && item.photos.length) {
+              const photosDiv = document.createElement("div");
+              photosDiv.classList.add("photo-container");
+              item.photos.forEach((photo, index) => {
+                const img = document.createElement("img");
+                img.src = photo;
+                img.classList.add("v-img");
+                img.setAttribute("data-fancybox", `gallery-${item.id}`);
+                img.setAttribute("data-src", photo);
+                photosDiv.appendChild(img);
+              });
+              photoCell.appendChild(photosDiv);
+            }
+
+            photoRow.appendChild(photoCell);
+            dataTableBody.appendChild(photoRow);
+          });
+
+          Fancybox.bind("[data-fancybox]", {
+            Toolbar: {
+              display: ["close"],
+            },
+          });
+        }
+
+        function updatePagination(meta) {
+          const totalPages = meta.totalPages;
+          pagination.innerHTML = `
+            <li class="page-item ${currentPage === 1 ? "disabled" : ""}">
+              <a class="page-link" href="#" aria-label="Previous" data-page="${
+                currentPage - 1
+              }">
+                <span aria-hidden="true">&laquo;</span>
+              </a>
+            </li>
+          `;
+          for (let i = 1; i <= totalPages; i++) {
+            pagination.innerHTML += `
+              <li class="page-item ${currentPage === i ? "active" : ""}">
+                <a class="page-link" href="#" data-page="${i}">${i}</a>
+              </li>
+            `;
+          }
+          pagination.innerHTML += `
+            <li class="page-item ${
+              currentPage === totalPages ? "disabled" : ""
+            }">
+              <a class="page-link" href="#" aria-label="Next" data-page="${
+                currentPage + 1
+              }">
+                <span aria-hidden="true">&raquo;</span>
+              </a>
+            </li>
+          `;
+
+          const pageLinks = pagination.querySelectorAll(".page-link");
+          pageLinks.forEach((link) => {
+            link.addEventListener("click", (e) => {
+              e.preventDefault();
+              const page = parseInt(e.target.getAttribute("data-page"));
+              if (!isNaN(page)) {
+                currentPage = page;
+                fetchData();
+              }
+            });
+          });
+        }
+
+        fetchData();
+      });
+    </script>
+  </body>
+</html>
